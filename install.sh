@@ -1240,36 +1240,53 @@ installWarp() {
 # 通过dns检查域名的IP
 checkDNSIP() {
     local domain=$1
-    local dnsIP=
+    local dnsIPs
     local type=4
-    dnsIP=$(dig @1.1.1.1 +time=2 +short "${domain}" | grep -E "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
-    if [[ -z "${dnsIP}" ]]; then
-        dnsIP=$(dig @8.8.8.8 +time=2 +short "${domain}" | grep -E "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
+    local foundMatch=false
+
+    # 使用 Cloudflare 的 1.1.1.1 DNS 服务器查询域名的 IPv4 地址
+    dnsIPs=$(dig @1.1.1.1 +time=2 +short "${domain}" | grep -E "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
+    if [[ -z "${dnsIPs}" ]]; then
+        # 使用 Google 的 8.8.8.8 DNS 服务器重试
+        dnsIPs=$(dig @8.8.8.8 +time=2 +short "${domain}" | grep -E "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
     fi
-    if echo "${dnsIP}" | grep -q "timed out" || [[ -z "${dnsIP}" ]]; then
+
+    # 检查是否获取到 IPv4 地址
+    if echo "${dnsIPs}" | grep -q "timed out" || [[ -z "${dnsIPs}" ]]; then
         echo
         echoContent red " ---> 无法通过DNS获取域名 IPv4 地址"
         echoContent green " ---> 尝试检查域名 IPv6 地址"
-        dnsIP=$(dig @2606:4700:4700::1111 +time=2 aaaa +short "${domain}")
+        dnsIPs=$(dig @2606:4700:4700::1111 +time=2 aaaa +short "${domain}")
         type=6
-        if echo "${dnsIP}" | grep -q "network unreachable" || [[ -z "${dnsIP}" ]]; then
+        if echo "${dnsIPs}" | grep -q "network unreachable" || [[ -z "${dnsIPs}" ]]; then
             echoContent red " ---> 无法通过DNS获取域名IPv6地址，退出安装"
             exit 0
         fi
     fi
-    local publicIP=
 
+    # 获取当前服务器的公共 IP 地址
+    local publicIP
     publicIP=$(getPublicIP "${type}")
-    if [[ "${publicIP}" != "${dnsIP}" ]]; then
+
+    # 检查是否有匹配的 IP 地址
+    for ip in ${dnsIPs}; do
+        if [[ "${publicIP}" == "${ip}" ]]; then
+            foundMatch=true
+            break
+        fi
+    done
+
+    if [[ "${foundMatch}" == true ]]; then
+        echoContent green " ---> 域名IP校验通过"
+    else
         echoContent red " ---> 域名解析IP与当前服务器IP不一致\n"
         echoContent yellow " ---> 请检查域名解析是否生效以及正确"
         echoContent green " ---> 当前VPS IP：${publicIP}"
-        echoContent green " ---> DNS解析 IP：${dnsIP}"
+        echoContent green " ---> DNS解析 IP：${dnsIPs}"
         exit 0
-    else
-        echoContent green " ---> 域名IP校验通过"
     fi
 }
+
 # 检查端口实际开放状态
 checkPortOpen() {
     handleSingBox stop >/dev/null 2>&1
