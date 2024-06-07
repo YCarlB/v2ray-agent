@@ -3940,7 +3940,7 @@ initXrayConfig() {
 {
   "log": {
     "error": "/etc/v2ray-agent/xray/error.log",
-    "loglevel": "warning",
+    "loglevel": "none",
     "dnsLog": false
   }
 }
@@ -3954,10 +3954,17 @@ EOF
   "policy": {
       "levels": {
           "0": {
-              "handshake": $((1 + RANDOM % 4)),
-              "connIdle": $((250 + RANDOM % 51))
+              "statsUserUplink": true,
+              "statsUserDownlink": true
           }
       }
+  },
+  "stats": {},
+  "api": {
+    "tag": "api",
+    "services": [
+      "StatsService"
+    ]
   }
 }
 EOF
